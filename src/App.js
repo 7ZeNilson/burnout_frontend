@@ -5,7 +5,8 @@ import { Upload, Mic, Play, Pause, Trash2, Send, RotateCcw, Loader2, AlertCircle
 import { format } from 'date-fns';
 
 // Configuração da API (deve corresponder à porta do seu backend Python)
-const API_BASE_URL = 'https://burnout-doi7.onrender.com';
+// const API_BASE_URL = 'https://burnout-doi7.onrender.com';
+const API_BASE_URL = ('https://burnout-doi7.onrender.com', 'https://burnout-frontend.onrender.com');
 
 // Função para chamar a API real
 const callVoiceAnalysisAPI = async (audioFile) => {
