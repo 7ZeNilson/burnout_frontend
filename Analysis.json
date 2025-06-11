@@ -1,0 +1,25 @@
+{
+    "name": "Analysis",
+    "type": "object",
+    "properties": {
+        "risk_level": {
+            "type": "string",
+            "enum": ["baixo", "médio", "alto"],
+            "description": "Nível de risco de burnout detectado."
+        },
+        "score": {
+            "type": "number",
+            "description": "A pontuação numérica da análise, de 0 a 1."
+        },
+        "inputType": {
+            "type": "string",
+            "enum": ["upload", "gravacao"],
+            "description": "Como o áudio foi enviado (upload ou gravação)."
+        },
+        "fileName": {
+            "type": "string",
+            "description": "Nome do arquivo original, se for upload."
+        }
+    },
+    "required": ["risk_level", "score", "inputType"]
+}
