@@ -104,7 +104,8 @@ const styles = {
     justifyContent: 'center',
     transition: 'all 0.2s',
     width: '100%',
-    marginBottom: '16px'
+    marginBottom: '16px',
+    position: 'relative'
   },
   center: {
     textAlign: 'center'
@@ -147,7 +148,13 @@ const styles = {
     backgroundColor: '#eff6ff'
   },
   hiddenInput: {
-    display: 'none'
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0,
+    cursor: 'pointer'
   },
   recordingControls: {
     display: 'flex',
@@ -331,7 +338,6 @@ const AnalysisRecorder = ({ onAnalyze }) => {
   const mediaRecorderRef = useRef(null);
   const recordedChunks = useRef([]);
   const timerRef = useRef(null);
-  const fileInputRef = useRef(null);
 
   // Timer para gravação
   useEffect(() => {
@@ -393,18 +399,10 @@ const AnalysisRecorder = ({ onAnalyze }) => {
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
     if (file) {
+      console.log('Arquivo selecionado:', file.name); // Debug
       setSelectedFile(file);
       setAudioURL(null);
       setRecordingTime(0);
-    }
-  };
-
-  const handleUploadButtonClick = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log('Clicou no botão de upload'); // Debug
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
     }
   };
 
@@ -462,24 +460,17 @@ const AnalysisRecorder = ({ onAnalyze }) => {
       </div>
 
       <div style={styles.recorderContainer}>
-        {/* Botão de Upload Separado */}
-        <button 
-          onClick={handleUploadButtonClick}
-          style={styles.uploadButton}
-          type="button"
-        >
+        {/* Botão de Upload com Input Sobreposto */}
+        <div style={{ ...styles.uploadButton, position: 'relative' }}>
           <FolderOpen size={18} style={{ marginRight: 8 }} />
           Procurar Arquivo de Áudio
-        </button>
-
-        {/* Input Hidden */}
-        <input
-          ref__={fileInputRef}
-          type="file"
-          accept="audio/*,.ogg,.mp3,.wav,.m4a,.flac"
-          onChange={handleFileSelect}
-          style={styles.hiddenInput}
-        />
+          <input
+            type="file"
+            accept="audio/*,.ogg,.mp3,.wav,.m4a,.flac"
+            onChange={handleFileSelect}
+            style={styles.hiddenInput}
+          />
+        </div>
 
         {/* Área de Drag and Drop */}
         <div
