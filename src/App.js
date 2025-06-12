@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Mic, Play, Pause, Trash2, Send, RotateCcw, Loader2, AlertCircle, FileAudio, Clock } from 'lucide-react';
+import { Upload, Mic, Play, Pause, Trash2, Send, RotateCcw, Loader2, AlertCircle, FileAudio, Clock, FolderOpen } from 'lucide-react';
 import { format } from 'date-fns';
 
 // Configuração da API
@@ -90,6 +90,22 @@ const styles = {
     transition: 'all 0.2s',
     width: '100%'
   },
+  uploadButton: {
+    backgroundColor: '#10b981',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '12px 24px',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s',
+    width: '100%',
+    marginBottom: '16px'
+  },
   center: {
     textAlign: 'center'
   },
@@ -124,7 +140,6 @@ const styles = {
     padding: '32px',
     textAlign: 'center',
     backgroundColor: '#f9fafb',
-    cursor: 'pointer',
     transition: 'all 0.2s'
   },
   uploadAreaActive: {
@@ -384,6 +399,15 @@ const AnalysisRecorder = ({ onAnalyze }) => {
     }
   };
 
+  const handleUploadButtonClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('Clicou no botão de upload'); // Debug
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -434,11 +458,30 @@ const AnalysisRecorder = ({ onAnalyze }) => {
       {/* Formatos Permitidos */}
       <div style={styles.formatsList}>
         <div style={styles.formatsTitle}>📁 Formatos de áudio aceitos:</div>
-        <p style={styles.formatsText}>MP3, WAV, OGG, M4A, FLAC (máximo 10MB)</p>
+        <p style={styles.formatsText}>MP3, WAV, OGG (WhatsApp), M4A, FLAC (máximo 10MB)</p>
       </div>
 
       <div style={styles.recorderContainer}>
-        {/* Upload de Arquivo */}
+        {/* Botão de Upload Separado */}
+        <button 
+          onClick={handleUploadButtonClick}
+          style={styles.uploadButton}
+          type="button"
+        >
+          <FolderOpen size={18} style={{ marginRight: 8 }} />
+          Procurar Arquivo de Áudio
+        </button>
+
+        {/* Input Hidden */}
+        <input
+          ref__={fileInputRef}
+          type="file"
+          accept="audio/*,.ogg,.mp3,.wav,.m4a,.flac"
+          onChange={handleFileSelect}
+          style={styles.hiddenInput}
+        />
+
+        {/* Área de Drag and Drop */}
         <div
           style={{
             ...styles.uploadArea,
@@ -447,20 +490,12 @@ const AnalysisRecorder = ({ onAnalyze }) => {
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
         >
           <Upload size={48} color="#6b7280" style={{ marginBottom: 16 }} />
-          <p><strong>Clique aqui ou arraste um arquivo de áudio</strong></p>
+          <p><strong>Ou arraste um arquivo de áudio aqui</strong></p>
           <p style={{ fontSize: 14, color: '#6b7280' }}>
-            Ou grave sua voz usando o microfone abaixo
+            Também pode gravar sua voz usando o microfone abaixo
           </p>
-          <input
-            ref__={fileInputRef}
-            type="file"
-            accept="audio/*"
-            onChange={handleFileSelect}
-            style={styles.hiddenInput}
-          />
         </div>
 
         {/* Arquivo Selecionado */}
@@ -468,7 +503,7 @@ const AnalysisRecorder = ({ onAnalyze }) => {
           <div style={styles.fileSelected}>
             <FileAudio size={24} />
             <div>
-              <strong>Arquivo selecionado:</strong><br />
+              <strong>✅ Arquivo carregado:</strong><br />
               {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
             </div>
           </div>
@@ -478,7 +513,7 @@ const AnalysisRecorder = ({ onAnalyze }) => {
         {isRecording && (
           <div style={styles.timer}>
             <Clock size={24} />
-            {formatTime(recordingTime)}
+            🔴 Gravando: {formatTime(recordingTime)}
           </div>
         )}
 
@@ -506,9 +541,14 @@ const AnalysisRecorder = ({ onAnalyze }) => {
 
         {/* Reproduzir Audio Gravado */}
         {audioURL && (
-          <audio controls style={{ width: '100%', marginTop: 16 }}>
-            <source src={audioURL} type="audio/wav" />
-          </audio>
+          <div>
+            <p style={{ fontSize: 14, color: '#16a34a', fontWeight: '600' }}>
+              ✅ Gravação concluída! Reproduza abaixo:
+            </p>
+            <audio controls style={{ width: '100%', marginTop: 8 }}>
+              <source src={audioURL} type="audio/wav" />
+            </audio>
+          </div>
         )}
 
         {/* Botão Analisar */}
