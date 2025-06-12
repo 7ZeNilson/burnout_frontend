@@ -1,14 +1,13 @@
-// Copie e cole este bloco inteiro no arquivo src/App.js
+// COPIE TUDO DAQUI PARA BAIXO
+// E COLE NO SEU ARQUIVO App.js
 
-import React, { useState, useRef } from 'react';
-import { Upload, Mic, Play, Pause, Trash2, Send, RotateCcw, Loader2, AlertCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, Mic, Play, Pause, Trash2, Send, RotateCcw, Loader2, AlertCircle, FileAudio, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 
-// Configuração da API (deve corresponder à porta do seu backend Python)
-// const API_BASE_URL = 'https://burnout-doi7.onrender.com';
+// Configuração da API
 const API_BASE_URL = 'https://burnout-doi7.onrender.com';
 
-// Função para chamar a API real
 const callVoiceAnalysisAPI = async (audioFile) => {
   const formData = new FormData();
   formData.append('file', audioFile, audioFile.name || 'recording.wav');
@@ -37,7 +36,7 @@ function App() {
     
     const inputType = file ? 'upload' : 'gravacao';
     const fileName = file ? file.name : null;
-    const audioFile = file || audioBlob;
+    const audioFile = file || new File([audioBlob], "recording.wav", { type: "audio/wav" });
 
     try {
       const result = await callVoiceAnalysisAPI(audioFile);
@@ -136,155 +135,188 @@ const AnalysisResult = ({ result, onAnalyzeAgain }) => {
   const config = {
     baixo: { title: 'Risco Baixo', color: '#16a34a', bgColor: '#f0fdf4', borderColor: '#bbf7d0', icon: <Play /> },
     médio: { title: 'Risco Médio', color: '#f59e0b', bgColor: '#fffbeb', borderColor: '#fde68a', icon: <Pause /> },
-    alto: { title: 'Risco Alto', color: '#dc2626', bgColor: '#fef2f2', borderColor: '#fecaca', icon: <AlertCircle /> },
+    alto: { title: 'Risco Alto', color: '#dc2626', bgColor: '#fef2f2', borderColor: '#fecaca', icon: <Mic /> }
   };
-  const currentConfig = config[result.burnout_risk] || config.médio;
+  const currentConfig = result ? config[result.risk_level] || config['baixo'] : config['baixo'];
 
   return (
     <div style={{ ...styles.card, backgroundColor: currentConfig.bgColor, borderColor: currentConfig.borderColor }}>
-      <h2 style={{ ...styles.title, color: currentConfig.color }}>{currentConfig.title} de Burnout</h2>
-      <p style={styles.subtitle}>
-        O score de risco calculado foi <strong>{result.score.toFixed(2)}</strong>.
-      </p>
-      <div style={{ margin: '24px 0' }}>
-        <p style={{...styles.subtitle, fontStyle: 'italic'}}>Lembre-se: esta é uma ferramenta de triagem e não substitui o diagnóstico de um profissional de saúde qualificado.</p>
+      <div style={{ ...styles.center, color: currentConfig.color }}>
+        {currentConfig.icon}
+        <h2 style={styles.title}>{currentConfig.title}</h2>
       </div>
-      <button onClick={onAnalyzeAgain} style={styles.buttonSecondary}>
-        Realizar Nova Análise <RotateCcw size={18} style={{ marginLeft: 8 }} />
-      </button>
-    </div>
-  );
-};
-
-
-const AnalysisHistory = ({ analyses }) => {
-  return (
-    <div style={{ ...styles.card, marginTop: 24 }}>
-      <h2 style={{...styles.title, marginBottom: 16 }}>Histórico de Análises</h2>
-      {analyses.length === 0 ? (
-        <p style={styles.subtitle}>Nenhuma análise realizada ainda.</p>
-      ) : (
-        <table style={styles.table}>
-            <thead>
-                <tr>
-                    <th style={styles.th}>Data</th>
-                    <th style={styles.th}>Origem</th>
-                    <th style={styles.th}>Risco</th>
-                    <th style={{...styles.th, textAlign: 'right'}}>Score</th>
-                </tr>
-            </thead>
-            <tbody>
-                {analyses.map(analysis => (
-                    <tr key={analysis.id}>
-                        <td style={styles.td}>{format(new Date(analysis.created_date), 'dd/MM/yyyy HH:mm')}</td>
-                        <td style={styles.td}>{analysis.inputType}</td>
-                        <td style={styles.td}>{analysis.risk_level}</td>
-                        <td style={{...styles.td, textAlign: 'right'}}>{analysis.score.toFixed(2)}</td>
-                    </tr>
-                ))}
-            </tbody>
-        </table>
-      )}
+      <p style={styles.subtitle}>
+        Sua pontuação de risco foi de <strong>{result?.score}</strong>. 
+        Este valor indica a probabilidade de sinais de estresse vocal em sua amostra.
+      </p>
+      <div style={{ ...styles.center, marginTop: 24, flexDirection: 'column', gap: 16 }}>
+        <p style={{ ...styles.subtitle, fontStyle: 'italic', maxWidth: '80%' }}>
+          Lembre-se: esta é uma análise preliminar e não substitui um diagnóstico profissional.
+        </p>
+        <button onClick={onAnalyzeAgain} style={styles.buttonSecondary}>
+          Analisar Novamente <RotateCcw size={18} style={{ marginLeft: 8 }} />
+        </button>
+      </div>
     </div>
   );
 };
 
 
 const AnalysisRecorder = ({ onAnalyze }) => {
-  const [audioSource, setAudioSource] = useState(null);
-  const [audioData, setAudioData] = useState(null); // File ou Blob
-  const [error, setError] = useState('');
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
+  const [recordingStatus, setRecordingStatus] = useState('idle'); // idle, recording, paused, finished
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [recordingTime, setRecordingTime] = useState(0);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        setError('Arquivo muito grande. Limite de 10MB.');
-        return;
-      }
-      setError('');
-      setAudioData(file);
-      setAudioSource('upload');
-    }
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const secs = (seconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
   };
 
-  const handleRecord = async () => {
+  const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorderRef.current = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      mediaRecorderRef.current.ondataavailable = event => {
-        audioChunksRef.current.push(event.data);
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        chunksRef.current.push(event.data);
       };
       mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        setAudioData(audioBlob);
-        stream.getTracks().forEach(track => track.stop());
+        const blob = new Blob(chunksRef.current, { type: 'audio/wav' });
+        setAudioBlob(blob);
+        chunksRef.current = [];
+        stream.getTracks().forEach(track => track.stop()); // Stop mic access
       };
       mediaRecorderRef.current.start();
-      setAudioSource('record');
+      setRecordingStatus('recording');
+
+      // Start timer
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+
     } catch (err) {
-      setError('Permissão do microfone negada. Verifique as configurações do seu navegador.');
+      console.error("Erro ao iniciar gravação:", err);
+      alert("Não foi possível acessar o microfone. Verifique as permissões do seu navegador.");
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-    }
-  };
-  
-  const reset = () => {
-    setAudioSource(null);
-    setAudioData(null);
-    setError('');
+    mediaRecorderRef.current.stop();
+    setRecordingStatus('finished');
+    clearInterval(timerRef.current);
   };
 
-  const isRecording = mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording';
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setSelectedFile(file);
+      setAudioBlob(null); // Clear any previous recording
+    }
+  };
+
+  const handleAnalyzeClick = () => {
+    if (audioBlob) {
+      onAnalyze({ audioBlob });
+    } else if (selectedFile) {
+      onAnalyze({ file: selectedFile });
+    }
+  };
+
+  const handleReset = () => {
+    setAudioBlob(null);
+    setSelectedFile(null);
+    setRecordingStatus('idle');
+    setRecordingTime(0);
+    clearInterval(timerRef.current);
+  };
+
+  const isReadyToAnalyze = audioBlob || selectedFile;
 
   return (
     <div style={styles.card}>
-      <h2 style={styles.title}>Como você se sente hoje?</h2>
-      <p style={styles.subtitle}>Grave um áudio ou envie um arquivo de voz.</p>
+      <h2 style={styles.title}>Como você quer analisar?</h2>
       
-      {error && <p style={{color: 'red'}}>{error}</p>}
-      
-      {!audioSource && (
-        <div style={styles.buttonGroup}>
-          <label style={{ ...styles.buttonSecondary, cursor: 'pointer' }}>
-            <Upload size={18} style={{ marginRight: 8 }}/> Enviar Arquivo
-            <input type="file" accept="audio/*" onChange={handleFileChange} style={{ display: 'none' }} />
-          </label>
-          <button onClick={handleRecord} style={styles.buttonSecondary}>
-            <Mic size={18} style={{ marginRight: 8 }}/> Gravar com Microfone
+      {/* Opção 1: Upload de Arquivo */}
+      <div style={styles.optionContainer}>
+        <label htmlFor="audio-upload" style={styles.uploadButton} role="button">
+          <Upload size={20} style={{ marginRight: 8 }} />
+          Carregar Arquivo de Áudio
+        </label>
+        <input
+          id="audio-upload"
+          type="file"
+          accept=".wav,.mp3,.ogg,.m4a"
+          onChange={handleFileChange}
+          style={{ display: 'none' }}
+          disabled={recordingStatus !== 'idle'}
+        />
+        <p style={styles.formatInfo}>Formatos permitidos: WAV, MP3, OGG, M4A</p>
+      </div>
+
+      {selectedFile && (
+        <div style={styles.statusBox}>
+          <FileAudio size={20} style={{ marginRight: 8, color: '#16a34a' }} />
+          <span>Arquivo selecionado: <strong>{selectedFile.name}</strong></span>
+        </div>
+      )}
+
+      <div style={styles.divider}>OU</div>
+
+      {/* Opção 2: Gravação */}
+      <div style={styles.optionContainer}>
+        {recordingStatus === 'idle' && (
+          <button onClick={startRecording} style={styles.micButton}>
+            <Mic size={20} style={{ marginRight: 8 }} />
+            Gravar Voz Agora
           </button>
-        </div>
-      )}
+        )}
 
-      {audioSource === 'record' && (
-        <div style={styles.center}>
-          {isRecording ? (
-            <button onClick={stopRecording} style={{...styles.buttonPrimary, backgroundColor: '#dc2626'}}>
-              <Pause size={18} style={{ marginRight: 8 }}/> Parar Gravação
-            </button>
-          ) : (
-            <p style={styles.subtitle}>Gravação concluída!</p>
-          )}
-        </div>
-      )}
-
-      {audioData && (
-        <div style={{ marginTop: 24, borderTop: '1px solid #e2e8f0', paddingTop: 24 }}>
-          <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16}}>
-            <button onClick={() => onAnalyze({ audioBlob: audioData, file: audioSource === 'upload' ? audioData : null })} style={styles.buttonPrimary}>
-              <Send size={18} style={{ marginRight: 8 }}/> Enviar para Análise
-            </button>
-            <button onClick={reset} style={{...styles.buttonSecondary, backgroundColor: '#fee2e2', color: '#b91c1c', borderColor: '#fecaca'}}>
-              <Trash2 size={18} />
+        {recordingStatus === 'recording' && (
+          <div style={{ ...styles.statusBox, ...styles.recordingActive }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Clock size={20} style={{ marginRight: 8 }} />
+              <span>Gravando: <strong>{formatTime(recordingTime)}</strong></span>
+            </div>
+            <button onClick={stopRecording} style={styles.stopButton}>
+              <Pause size={16} /> Parar
             </button>
           </div>
+        )}
+
+        {recordingStatus === 'finished' && audioBlob && (
+          <div style={styles.statusBox}>
+            <FileAudio size={20} style={{ marginRight: 8, color: '#16a34a' }} />
+            <span>Gravação concluída ({formatTime(recordingTime)})</span>
+          </div>
+        )}
+      </div>
+
+      {/* Ações Finais */}
+      {(recordingStatus === 'finished' || selectedFile) && (
+        <div style={styles.actionsContainer}>
+          <button onClick={handleReset} style={styles.resetButton}>
+            <Trash2 size={18} style={{ marginRight: 8 }} />
+            Descartar
+          </button>
+          <button 
+            onClick={handleAnalyzeClick} 
+            disabled={!isReadyToAnalyze} 
+            style={isReadyToAnalyze ? styles.buttonPrimary : styles.buttonDisabled}
+          >
+            Analisar Agora <Send size={18} style={{ marginLeft: 8 }} />
+          </button>
         </div>
       )}
     </div>
@@ -292,25 +324,231 @@ const AnalysisRecorder = ({ onAnalyze }) => {
 };
 
 
-// --- ESTILOS CSS-in-JS ---
+const AnalysisHistory = ({ analyses }) => {
+  if (analyses.length === 0) return null;
+
+  return (
+    <div style={{...styles.card, marginTop: '24px'}}>
+      <h2 style={styles.title}>Histórico de Análises</h2>
+      <ul style={styles.historyList}>
+        {analyses.map(item => (
+          <li key={item.id} style={styles.historyItem}>
+            <div style={styles.historyInfo}>
+              <span style={{ fontWeight: 'bold', color: '#111827' }}>
+                Risco: {item.risk_level} (Score: {item.score})
+              </span>
+              <span style={{ fontSize: '14px', color: '#4b5563' }}>
+                {item.inputType === 'upload' ? `Arquivo: ${item.fileName}` : 'Gravação de Voz'}
+              </span>
+            </div>
+            <span style={{ fontSize: '14px', color: '#6b7280' }}>
+              {format(new Date(item.created_date), "dd/MM/yyyy 'às' HH:mm")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+// --- ESTILOS ---
 
 const styles = {
-  page: { display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#f1f5f9' },
-  header: { backgroundColor: 'white', padding: '16px 32px', borderBottom: '1px solid #e2e8f0' },
-  headerTitle: { margin: 0, color: '#1e293b', fontSize: 24 },
-  main: { flex: 1, width: '100%', maxWidth: 800, margin: '32px auto', padding: '0 16px' },
-  footer: { textAlign: 'center', padding: '16px', color: '#64748b', fontSize: 14 },
-  card: { backgroundColor: 'white', padding: 32, borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', textAlign: 'center' },
-  title: { margin: '0 0 12px 0', color: '#1e293b', fontSize: 28 },
-  subtitle: { margin: 0, color: '#64748b', lineHeight: 1.6 },
-  buttonGroup: { display: 'flex', gap: 16, justifyContent: 'center', margin: '24px 0' },
-  buttonPrimary: { backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '12px 24px', borderRadius: 8, fontSize: 16, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', fontWeight: 600 },
-  buttonSecondary: { backgroundColor: 'white', color: '#475569', border: '1px solid #cbd5e1', padding: '12px 24px', borderRadius: 8, fontSize: 16, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', fontWeight: 600 },
-  icon: { marginBottom: 16, color: '#3b82f6' },
-  center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
-  table: { width: '100%', borderCollapse: 'collapse', marginTop: 16 },
-  th: { borderBottom: '2px solid #e2e8f0', padding: '12px 8px', textAlign: 'left', color: '#475569', fontWeight: 600 },
-  td: { borderBottom: '1px solid #e2e8f0', padding: '12px 8px', color: '#334155' }
+  page: {
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    backgroundColor: '#f3f4f6',
+    minHeight: '100vh',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  header: {
+    backgroundColor: '#ffffff',
+    padding: '16px 32px',
+    borderBottom: '1px solid #e5e7eb',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+  },
+  headerTitle: {
+    fontSize: '24px',
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  main: {
+    flex: 1,
+    width: '100%',
+    maxWidth: '800px',
+    margin: '32px auto',
+    padding: '0 16px',
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    border: '1px solid #e5e7eb',
+    padding: '32px',
+    boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    textAlign: 'center',
+  },
+  title: {
+    fontSize: '22px',
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: '12px',
+  },
+  subtitle: {
+    fontSize: '16px',
+    color: '#4b5563',
+    lineHeight: 1.5,
+    maxWidth: '90%',
+    marginBottom: '24px',
+  },
+  buttonPrimary: {
+    backgroundColor: '#4f46e5',
+    color: '#ffffff',
+    padding: '12px 24px',
+    borderRadius: '8px',
+    border: 'none',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background-color 0.2s',
+  },
+  buttonSecondary: {
+    backgroundColor: '#ffffff',
+    color: '#4f46e5',
+    padding: '10px 20px',
+    borderRadius: '8px',
+    border: '1px solid #d1d5db',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background-color 0.2s',
+  },
+  buttonDisabled: {
+    backgroundColor: '#e5e7eb',
+    color: '#9ca3af',
+    padding: '12px 24px',
+    borderRadius: '8px',
+    border: 'none',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'not-allowed',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  center: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  icon: {
+    marginBottom: '16px',
+  },
+  footer: {
+    textAlign: 'center',
+    padding: '24px',
+    color: '#6b7280',
+    fontSize: '14px',
+  },
+  historyList: {
+    listStyle: 'none',
+    padding: 0,
+    width: '100%',
+  },
+  historyItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 0',
+    borderBottom: '1px solid #f3f4f6',
+  },
+  historyInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  optionContainer: {
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    marginBottom: '16px',
+  },
+  uploadButton: {
+    ...styles.buttonSecondary,
+    width: '100%',
+    maxWidth: '300px',
+    marginBottom: '8px',
+  },
+  micButton: {
+    ...styles.buttonSecondary,
+    width: '100%',
+    maxWidth: '300px',
+    borderColor: '#4f46e5',
+  },
+  stopButton: {
+    backgroundColor: '#ef4444',
+    color: '#ffffff',
+    padding: '4px 12px',
+    borderRadius: '6px',
+    border: 'none',
+    fontSize: '14px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  formatInfo: {
+    fontSize: '12px',
+    color: '#6b7280',
+  },
+  divider: {
+    color: '#9ca3af',
+    margin: '16px 0',
+    fontWeight: 'bold',
+  },
+  actionsContainer: {
+    display: 'flex',
+    gap: '16px',
+    marginTop: '24px',
+    borderTop: '1px solid #e5e7eb',
+    paddingTop: '24px',
+    width: '100%',
+    justifyContent: 'center',
+  },
+  resetButton: {
+    ...styles.buttonSecondary,
+    color: '#ef4444',
+    borderColor: '#fecaca',
+  },
+  statusBox: {
+    width: '100%',
+    maxWidth: '400px',
+    backgroundColor: '#f0fdf4',
+    border: '1px solid #bbf7d0',
+    borderRadius: '8px',
+    padding: '12px',
+    marginTop: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    color: '#14532d',
+  },
+  recordingActive: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#93c5fd',
+    color: '#1e40af',
+    justifyContent: 'space-between',
+  }
 };
 
 export default App;
